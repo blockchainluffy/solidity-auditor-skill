@@ -139,7 +139,21 @@ Skim `references/checklist-swc.md` for any classical weaknesses not covered by t
 
 Load `references/mev.md` and apply it to every state-changing entry point. MEV issues exist in nearly every protocol that touches value — even ones that don't look like they should have MEV exposure (governance voting, NFT mints, airdrops). Do not skip this even if the protocol "doesn't seem MEV-relevant."
 
-### 3d. Consult the Solodit MCP — but only when justified
+### 3d. External integration liveness review (always run when assets depend on external systems)
+
+For every external integration that custody, prices, bridges, stakes, lends, or withdraws assets, run a liveness + migration escape-hatch check. Static tools often miss these because each individual guard looks reasonable.
+
+Required test vector:
+> Assume the external integration is honest but frozen: the protocol still has a positive position or accounting claim there, but user-facing exits return `0`, revert, pause, or otherwise cannot complete. Can users still exit, and can governance migrate or quarantine the integration without first withdrawing from the frozen system?
+
+Check for:
+- Exit paths that depend on `maxWithdraw`, `redeem`, `withdraw`, `unstake`, `claim`, bridge delivery, oracle update, or liquidation availability.
+- Migration setters that require the old integration position to be zero before switching.
+- Accounting that treats nominal/convertible assets as available even when they are not currently withdrawable.
+- Emergency paths to pause new deposits, redirect future deposits, switch integrations, mark assets impaired, socialize loss explicitly, or pay exits from liquid reserves while quarantining frozen assets.
+- Deadlocks where the only way to satisfy migration preconditions is the exact external action that has become unavailable.
+
+### 3e. Consult the Solodit MCP — but only when justified
 
 The Solodit MCP server (if available) searches 20,000+ historical audit findings. Use it when:
 - You suspect a vulnerability pattern but want to confirm with precedent ("has this exact thing been found in other audits?")
@@ -150,7 +164,7 @@ The Solodit MCP server (if available) searches 20,000+ historical audit findings
 
 If the Solodit MCP is not available in the current environment, that's fine — proceed with the checklist-driven review.
 
-**Exit condition:** Every relevant checklist item walked, MEV review complete, candidate findings list updated.
+**Exit condition:** Every relevant checklist item walked, MEV review complete, external integration liveness reviewed where applicable, candidate findings list updated.
 
 ---
 
