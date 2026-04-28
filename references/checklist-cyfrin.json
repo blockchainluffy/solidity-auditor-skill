@@ -1,0 +1,257 @@
+{
+  "_meta": {
+    "source": "https://github.com/Cyfrin/audit-checklist (Solodit's Aggregated Smart Contract Audit Checklist)",
+    "live_json_url": "https://github.com/Cyfrin/audit-checklist/raw/main/checklist.json",
+    "version_notes": "This file is a curated starter subset. For the full ~3700-line, ~200-item checklist, fetch the live_json_url at audit start. The schema below matches the live file exactly.",
+    "schema": {
+      "top_level": "Array of category objects",
+      "category_object": {
+        "category": "string - top-level category name",
+        "description": "string - what this category covers",
+        "data": "array of subcategories OR check items"
+      },
+      "check_item": {
+        "id": "string - unique ID like SOL-AM-DOSA-1",
+        "question": "string - the imperative question to ask of the code",
+        "description": "string - background explaining why this matters",
+        "remediation": "string - how to fix",
+        "references": "array of URLs - real audit findings showing this issue",
+        "tags": "array of strings"
+      }
+    },
+    "how_to_use": "In Phase 3a, walk items relevant to the protocol type identified in Phase 1. Universal categories (Attacker's Mindset, Access Control, Arithmetic) apply to every audit. Protocol-specific categories (e.g., AMM, Lending) apply selectively.",
+    "id_prefix_legend": {
+      "SOL-AM-*": "Attacker's Mindset (universal)",
+      "SOL-AC-*": "Access Control (universal)",
+      "SOL-AR-*": "Arithmetic (universal)",
+      "SOL-OR-*": "Oracle (load if oracle-dependent)",
+      "SOL-EC-*": "External Call patterns (universal)",
+      "SOL-ERC20-*": "ERC20 specific",
+      "SOL-ERC4626-*": "ERC4626 specific",
+      "SOL-ERC721-*": "ERC721 specific",
+      "SOL-AMM-*": "AMM specific",
+      "SOL-LM-*": "Lending Market specific",
+      "SOL-GOV-*": "Governance specific"
+    }
+  },
+  "data": [
+    {
+      "category": "Attacker's Mindset",
+      "description": "Universal attack patterns to consider for every audit. Walk these items regardless of protocol type.",
+      "data": [
+        {
+          "category": "Denial-Of-Service (DOS)",
+          "data": [
+            {
+              "id": "SOL-AM-DOSA-1",
+              "question": "Is the withdrawal pattern (pull, not push) used to prevent denial of service?",
+              "description": "Push-style refunds break for all users if any single recipient reverts. Pull-pattern lets each user claim independently.",
+              "remediation": "Have users withdraw via a separate function rather than receiving in a loop."
+            },
+            {
+              "id": "SOL-AM-DOSA-3",
+              "question": "How does the protocol handle tokens with blacklisting (e.g., USDC)?",
+              "description": "If a blacklisted address is in a critical flow (recipient of a refund, member of a payout list), the entire flow can DOS.",
+              "remediation": "Allow protocols to skip or replace blacklisted recipients; do not block on a single failed transfer."
+            },
+            {
+              "id": "SOL-AM-DOSA-4",
+              "question": "Can an attacker force the protocol to process an unbounded queue?",
+              "description": "Spamming small entries into a queue that must be processed in full causes DoS at gas-limit boundary.",
+              "remediation": "Bound iteration, paginate, or use pull-style claims."
+            }
+          ]
+        },
+        {
+          "category": "Donation Attack",
+          "data": [
+            {
+              "id": "SOL-AM-DA-1",
+              "question": "Does the protocol rely on `address(this).balance` or `token.balanceOf(this)` instead of internal accounting?",
+              "description": "An attacker can directly transfer tokens to manipulate the protocol's view of its own holdings. Classic vault inflation attack.",
+              "remediation": "Track balances in internal storage updated only by the protocol's own deposit/withdraw functions."
+            }
+          ]
+        },
+        {
+          "category": "Front-running",
+          "data": [
+            {
+              "id": "SOL-AM-FrA-1",
+              "question": "Are 'get-or-create' patterns protected against front-running?",
+              "description": "If a function creates a resource and then uses it, an attacker can front-run with different parameters and manipulate the eventual interaction.",
+              "remediation": "Separate creation from use, or require the caller to pass the expected resource state and validate."
+            },
+            {
+              "id": "SOL-AM-FrA-4",
+              "question": "If commit-reveal is used, is it bound to the user and transaction parameters?",
+              "description": "A commit-reveal scheme that doesn't bind to the user's address can be front-run by copying the commit.",
+              "remediation": "Hash should include msg.sender, all parameters, and a per-user nonce."
+            }
+          ]
+        },
+        {
+          "category": "Reentrancy",
+          "data": [
+            {
+              "id": "SOL-AM-Reentrancy-1",
+              "question": "Is read-only reentrancy possible via view functions called by other protocols?",
+              "description": "External integrators reading a view function during a callback can see inconsistent state and act on it. ReadOnlyReentrancy was the Curve incident pattern.",
+              "remediation": "Extend reentrancy guards to view functions whose return values are consumed by external integrators, or document the constraint."
+            },
+            {
+              "id": "SOL-AM-Reentrancy-2",
+              "question": "Are state changes made before all external calls (Checks-Effects-Interactions)?",
+              "description": "External calls can re-enter; if state is updated after the call, the re-entered call sees stale state.",
+              "remediation": "Apply CEI strictly. Use ReentrancyGuard as a backup, not the primary defense."
+            },
+            {
+              "id": "SOL-AM-Reentrancy-3",
+              "question": "Are ERC777 / ERC1155 / ERC721 callbacks considered as reentrancy vectors?",
+              "description": "Tokens with hooks (ERC777 tokensReceived, ERC1155 onReceived, ERC721 onERC721Received) can re-enter on transfer. Many 'standard ERC20' protocols break with ERC777.",
+              "remediation": "Either reject hook-supporting tokens, apply CEI, or use reentrancy guards on every function that transfers."
+            }
+          ]
+        },
+        {
+          "category": "Price Manipulation",
+          "data": [
+            {
+              "id": "SOL-AM-PMA-1",
+              "question": "Is any price calculated from token balance ratios in a pool?",
+              "description": "Direct balance-ratio pricing is flash-loan-manipulable. This has caused dozens of DeFi exploits.",
+              "remediation": "Use Chainlink (or equivalent decentralized oracle) for asset prices; if using a DEX, use TWAP, not spot."
+            },
+            {
+              "id": "SOL-AM-PMA-2",
+              "question": "Is price read from a DEX spot (e.g., Uniswap V3 slot0)?",
+              "description": "Spot prices from DEXes are manipulable in a single transaction via flash loan.",
+              "remediation": "Use TWAP with a window appropriate to liquidity and volatility."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Access Control",
+      "description": "Universal. Verify every privileged function has correct authorization.",
+      "data": [
+        {
+          "id": "SOL-AC-1",
+          "question": "Does every state-changing function have appropriate access control?",
+          "description": "Missing modifiers are the #1 cause of catastrophic exploits.",
+          "remediation": "Apply onlyOwner, onlyRole, or explicit msg.sender checks. Audit every external/public non-view function."
+        },
+        {
+          "id": "SOL-AC-2",
+          "question": "Are role grants and revocations themselves access-controlled?",
+          "description": "AccessControl misconfigurations (DEFAULT_ADMIN_ROLE not held by trusted entity) brick or compromise the protocol.",
+          "remediation": "Verify the admin role hierarchy at deployment and any role-change paths."
+        },
+        {
+          "id": "SOL-AC-3",
+          "question": "Is `initialize()` protected against being called twice or by anyone?",
+          "description": "Front-running deployment-then-initialize lets an attacker seize ownership.",
+          "remediation": "Use OpenZeppelin Initializable; deploy and initialize atomically."
+        },
+        {
+          "id": "SOL-AC-4",
+          "question": "Are there any tx.origin checks for authorization?",
+          "description": "tx.origin is phishable via intermediate contracts.",
+          "remediation": "Always use msg.sender."
+        }
+      ]
+    },
+    {
+      "category": "Arithmetic",
+      "description": "Universal. Even with Solidity 0.8+ overflow checks, precision and rounding bugs are common.",
+      "data": [
+        {
+          "id": "SOL-AR-1",
+          "question": "Are all `unchecked { }` blocks justified and bounded?",
+          "description": "Developers often use unchecked for gas, but if assumptions break, overflow returns.",
+          "remediation": "Comment why each unchecked is safe; verify the bound holds."
+        },
+        {
+          "id": "SOL-AR-2",
+          "question": "Does division happen before multiplication?",
+          "description": "Integer division truncates; doing it before multiplication causes precision loss.",
+          "remediation": "Multiply first, divide last. Use FixedPointMathLib or PRBMath for non-trivial math."
+        },
+        {
+          "id": "SOL-AR-3",
+          "question": "Are rounding directions correct (in protocol's favor for shares, against user for owed amounts)?",
+          "description": "Rounding the wrong way creates dust loss for the protocol or free value for users. Inflation attacks exploit this.",
+          "remediation": "Round shares down on deposit, up on withdraw. Round debt up against the borrower."
+        },
+        {
+          "id": "SOL-AR-4",
+          "question": "Are decimal differences handled correctly when comparing/combining tokens?",
+          "description": "Comparing 6-decimal USDC to 18-decimal DAI without normalization breaks logic.",
+          "remediation": "Always normalize to a single precision before arithmetic."
+        }
+      ]
+    },
+    {
+      "category": "External Calls",
+      "description": "Universal. External calls are reentrancy and DOS vectors.",
+      "data": [
+        {
+          "id": "SOL-EC-1",
+          "question": "Are return values from low-level calls (call, send, transfer) checked?",
+          "description": "Unchecked calls silently fail and proceed.",
+          "remediation": "Always check the bool return; revert on failure unless intentional."
+        },
+        {
+          "id": "SOL-EC-2",
+          "question": "Is gas forwarded explicitly considered?",
+          "description": "transfer/send forward 2300 gas, which has broken with EIP-2929 repricings. Hardcoded gas in call() can underflow with future repricings.",
+          "remediation": "Use call{value: x}(\"\") with checked return, no hardcoded gas, plus reentrancy guard."
+        },
+        {
+          "id": "SOL-EC-3",
+          "question": "Are external calls in loops protected against single-recipient DoS?",
+          "description": "One reverting recipient blocks the whole loop.",
+          "remediation": "Try-catch the call, or use pull-pattern."
+        }
+      ]
+    },
+    {
+      "category": "Oracle",
+      "description": "Load if any oracle (Chainlink, Pyth, custom, DEX-derived) is used.",
+      "data": [
+        {
+          "id": "SOL-OR-1",
+          "question": "Is the oracle's staleness check enforced (heartbeat + updatedAt)?",
+          "description": "A frozen oracle returning stale prices can cause incorrect liquidations or mints.",
+          "remediation": "Require updatedAt within heartbeat; revert on stale."
+        },
+        {
+          "id": "SOL-OR-2",
+          "question": "Is the oracle's `answeredInRound` validated?",
+          "description": "Chainlink can return data from a previous round if the latest round is incomplete.",
+          "remediation": "Require answeredInRound >= roundId."
+        },
+        {
+          "id": "SOL-OR-3",
+          "question": "Is min/max price boundary respected (Chainlink aggregator)?",
+          "description": "Chainlink aggregators clamp at min/max; LUNA crashed below the min price and the oracle returned the floor.",
+          "remediation": "Check returned price against min/max from the aggregator and revert if at the boundary."
+        },
+        {
+          "id": "SOL-OR-4",
+          "question": "Is L2 sequencer uptime checked on Optimism, Arbitrum, Base?",
+          "description": "If sequencer is down, oracle data is stale by definition; liquidations during downtime are unfair.",
+          "remediation": "Use the L2 sequencer uptime feed; pause price-dependent ops during downtime + grace period."
+        },
+        {
+          "id": "SOL-OR-5",
+          "question": "If the oracle is custom or DEX-derived, is it manipulation-resistant?",
+          "description": "Custom oracles often inherit DEX spot vulnerabilities.",
+          "remediation": "Use TWAP, ensure deep liquidity, document the manipulation cost."
+        }
+      ]
+    }
+  ],
+  "_extension_note": "This starter contains the universal categories. For protocol-specific items (ERC20, ERC4626, AMM, lending, etc.), consult the corresponding files in references/protocols/, which were written to complement (not duplicate) this checklist. For the comprehensive ~200-item live checklist, fetch from live_json_url and grep by category."
+}
