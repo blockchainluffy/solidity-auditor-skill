@@ -55,21 +55,42 @@ solidity-auditor/
 
 ## Installation
 
-### As a Claude Code skill
+### 1. Download
 
-Drop the `solidity-auditor` directory into a skills location Claude Code reads:
+Clone the repo (recommended — easy to pull updates):
 
 ```bash
-# user-level
-mkdir -p ~/.claude/skills
-cp -r solidity-auditor ~/.claude/skills/
-
-# or project-level
-mkdir -p .claude/skills
-cp -r solidity-auditor .claude/skills/
+git clone https://github.com/blockchainluffy/solidity-auditor-skill.git
 ```
 
-Then invoke it from a Claude Code session by asking for a Solidity audit.
+…or download a tarball:
+
+```bash
+curl -L https://github.com/blockchainluffy/solidity-auditor-skill/archive/refs/heads/main.tar.gz | tar -xz
+mv solidity-auditor-skill-main solidity-auditor-skill
+```
+
+### 2. Install as a Claude Code skill
+
+Copy the skill payload into a location Claude Code reads. The skill itself lives under the repo root (`SKILL.md`, `scripts/`, `references/`), so we copy the whole repo directory and rename it to `solidity-auditor` (the name Claude Code uses to identify the skill, taken from `SKILL.md` frontmatter):
+
+```bash
+# user-level (available in every Claude Code session)
+mkdir -p ~/.claude/skills
+cp -r solidity-auditor-skill ~/.claude/skills/solidity-auditor
+
+# or project-level (only available inside this project)
+mkdir -p .claude/skills
+cp -r /path/to/solidity-auditor-skill .claude/skills/solidity-auditor
+```
+
+Verify Claude Code sees it:
+
+```bash
+claude /skills
+```
+
+You should see `solidity-auditor` in the list. Then invoke it from a session by asking for a Solidity audit (see *Usage example* below).
 
 ### Tooling prerequisites
 
